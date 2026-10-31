@@ -186,6 +186,26 @@ assets/          logo, mark, favicon, social card
 qwenputer-cpu.patch   two-line fastexec fix for the standalone chip
 ```
 
+## Where this could run
+
+This is a demo that exact computation can live in a model's weights. It is not a node replacement.
+
+**Realistic today**
+
+- **Sidecar next to the chain software.** A node operator runs the model beside their own client and uses it to review, flag or hold transactions in their own RPC endpoint, mempool view or wallet guard. It affects only that operator's infrastructure, not consensus. This is the realistic path today.
+- **Off-chain checker and audit.** Re-run a transaction on the weights machine, compare it to the reference result, and attach the review to an audit trail.
+- **Judgement layer in front of a wallet or multisig.** The exact VM result plus the review step decides allow, hold or block before a signer approves.
+
+**Research direction: part of consensus**
+
+Making the weights machine part of consensus would need:
+
+- **Determinism.** GPU floating point can differ across hardware and software versions. The weights here use exact lookup-table style math with values that stay exactly 0 or 1, but a full Qwen-sized model is a much bigger problem.
+- **Cost and speed.** A tiny program takes tens of thousands of tokens, and every validator would have to repeat it. Each EVM opcode costs 90 to 190 tokens here, after a start-up of 1,500 to 4,500 tokens.
+- **Compute limits.** The model run would need to be metered and bounded by gas like any other execution.
+
+The judgement filter is illustrative heuristics on synthetic histories, not a security product.
+
 ## Future possibilities
 
 - **Run inside the full merged checkpoint.** Rent a 24 GB GPU and run the same firmware inside Qwenputer's merged Qwen3.5-4B model, so the language model and the EVM share one forward pass.
