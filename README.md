@@ -9,13 +9,13 @@ Solidity contracts run on a RISC-V CPU that lives in compiled transformer layers
 
 ## The pitch
 
-EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, SwiGLU feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. The EVM is not hand-built into the weights: it is firmware, and the CPU that runs it is Qwenputer's. Ten Solidity contracts run on it, and every result is checked against py-evm.
+EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. The EVM is not hand-built into the weights: it is firmware, and the CPU that runs it is Qwenputer's. Ten Solidity contracts run on it, and every result is checked against py-evm.
 
 On top of the VM sits a **judgement filter**: after the contract has run, a separate review step looks at the amount, the destination and the history, and returns allow, hold or block with a reason.
 
 ## Why: code that does exactly what it says
 
-Some of the costliest smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That gap motivated this project: fuse the best of smart contracts (trustless, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
+Some of the costliest smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That first kind is what motivated this project: fuse the best of smart contracts (trustless, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
 
 A transformer that can execute contract bytecode exactly is a step toward a single model that both runs the program deterministically and reasons about whether the result makes sense.
 
@@ -34,19 +34,19 @@ C EVM interpreter (firmware/evm.c) --riscv gcc--> RV32IM ELF --> ROM
         Qwenputer chip layers (compiled, no training)
         +-----------------------------------------------------------+
 token ->| attention: fetch pc, registers, ROM words, decode          |-> next token
-   ^    | SwiGLU FFN: ALU (add, shift, multiply, compare, branch)    |      |
+   ^    | FFN: ALU (add, shift, multiply, compare, branch)           |      |
    |    | Gated DeltaNet: exact RAM (EVM stack, memory, storage)     |      |
    |    +-----------------------------------------------------------+      |
    +------------------------ fed back as the next input -------------------+
 ```
 
-1. **Bytecode.** Each demo is compiled with solc 0.8.24 (optimizer on, Shanghai). The runtime bytecode, calldata, preset storage slots and gas limit are packed into a job block that the firmware reads from RAM.
-2. **Fetch and decode via attention.** Qwenputer emits one structured token per micro-step (families such as `F0/F1/F2` fetch, `V` value, `J` jump, `ST/SS` store, `QD/QS` query). Attention heads look up the program counter, register values and ROM words from earlier tokens.
-3. **ALU in the FFN.** SwiGLU blocks implement RV32IM plus Zba arithmetic exactly. The EVM's 256-bit words are 8 x 32-bit limbs: ADD/SUB are carry chains, MUL is schoolbook, DIV/MOD use a single-limb fast path and Knuth algorithm D for multi-limb divisors, EXP is square and multiply.
+1. **Bytecode.** Each demo is compiled with solc 0.8.24 for Shanghai (the bytecode uses PUSH0). The runtime bytecode, calldata, preset storage slots and gas limit are packed into a job block that the firmware reads from RAM.
+2. **Fetch and decode via attention.** Qwenputer emits a short record of structured tokens per RV32 instruction (for example `V` and `F0/F1/F2` for value chunks, `J` for jumps, `QS/QD` for division quotient digits and `BYTE` for output). Attention heads look up the program counter, register values and ROM words from earlier tokens.
+3. **ALU in the FFN.** Feed-forward blocks implement RV32IM plus Zba arithmetic exactly. The EVM's 256-bit words are 8 x 32-bit limbs: ADD/SUB are carry chains, MUL is schoolbook, DIV/MOD use a single-limb fast path and Knuth algorithm D for multi-limb divisors, EXP is square and multiply.
 4. **Stack, memory and storage as exact RAM.** Gated DeltaNet heads with one-hot keys store bytes exactly. The EVM stack (96 entries), memory (2 KB) and storage (48 slots) all live there.
 5. **Result.** The firmware prints each executed EVM opcode as two hex characters, then the status, gas, return data and changed storage, all as `BYTE` tokens. Every token the model predicts is fed back as its next input.
 
-One EVM opcode costs roughly 80 to 170 RV32 instructions (about 90 to 190 tokens), after a start-up of 1,500 to 4,500 tokens (job load and the JUMPDEST scan).
+Across the 23 demo runs, a whole run costs 87 to 194 tokens per executed EVM opcode, fixed overhead included (job load, the JUMPDEST scan and the result print). The smallest run is 16,370 tokens and the largest is 605,944.
 
 ### What is in the weights and what is emulated
 
@@ -214,8 +214,8 @@ This is a demo that exact computation can live in a model's weights. It is not a
 
 Making the weights machine part of consensus would need:
 
-- **Determinism.** GPU floating point can differ across hardware and software versions. The weights here use exact lookup-table style math with values that stay exactly 0 or 1, but a full Qwen-sized model is a much bigger problem.
-- **Cost and speed.** A tiny program takes tens of thousands of tokens, and every validator would have to repeat it. Each EVM opcode costs 90 to 190 tokens here, after a start-up of 1,500 to 4,500 tokens.
+- **Determinism.** GPU floating point can differ across hardware and software versions. The compiled CPU here matched the reference trace token for token on CPU in fp32, but agreement across GPUs and software versions has not been tested, and a full Qwen-sized model is a much bigger problem.
+- **Cost and speed.** A tiny program takes tens of thousands of tokens, and every validator would have to repeat it. Here a whole demo run costs 87 to 194 tokens per executed EVM opcode, and even the smallest run is 16,370 tokens.
 - **Compute limits.** The model run would need to be metered and bounded by gas like any other execution.
 
 The judgement filter is illustrative heuristics on synthetic histories, not a security product.
@@ -226,12 +226,12 @@ The judgement filter is illustrative heuristics on synthetic histories, not a se
 - Opcode subset only: no KECCAK256 (so no mappings), no CALL/CREATE/LOG, no SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, no precompiles.
 - Build limits: 3,072 bytes of code, 256 bytes of calldata, 2 KB memory, 96-entry stack, 48 storage slots. Going over halts with status "build limit".
 - Single call with preset storage. No state trie, no persistence between runs, gas refunds not tracked.
-- Slow: tens to a few hundred tokens per second on CPU, and a demo run is 15,000 to 600,000 tokens.
+- Slow: the batched CPU runs here averaged under 200 tokens per second (183,929 tokens in 961 s for 9 runs, 154,626 tokens in 876 s for 3 runs), and a demo run is 16,370 to 605,944 tokens.
 - The judgement filter is simple heuristics on synthetic histories. It is a design sketch, not a security product.
 
 ## Future possibilities
 
-- **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should give orders of magnitude more tokens per second.
+- **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should be much faster; this has not been measured yet.
 - **A chat bridge.** A small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation and read back exact results, with the judgement filter as an in-context reviewer.
 - **More of the EVM.** KECCAK256 (unlocks Solidity mappings), LOG, SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, larger memory and storage, and multi-call state.
 - **Smarter review.** A real LLM judge behind the `LLMJudge` interface, richer history features, and per-protocol policies.
