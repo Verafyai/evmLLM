@@ -1,11 +1,15 @@
 """Five judgement-filter scenarios: exact VM run on the RV32 firmware (checked against py-evm),
-then the rule-based review."""
+then the rule-based review, then the prompt and a simulated model reply.
+
+The simulated reply is canned JSON. No real LLM is called. The stored verdict is still the
+rule verdict: a simulated answer cannot make it looser, and these canned answers are not stricter.
+"""
 import json
 from dataclasses import asdict
 
 from evmllm.demos import ART, E, USD, calldata, describe
 from evmllm.host import Job, run_pyevm, run_ref
-from evmllm.judge import Context, Tx, review
+from evmllm.judge import LLMJudge, SimulatedLLM, Context, Tx, build_prompt, review, vm_record
 
 T0 = 1_790_000_000
 A = {"ops": "0xa11ce00000000000000000000000000000a11ce0", "payroll": "0x9a7b000000000000000000000000000000009a7b",
@@ -56,6 +60,10 @@ def main():
         ctx = Context(**s["ctx"])
         note = describe(a.ret, a.status, s["rtype"])
         v = review(s["tx"], a.status, ctx, note)
+        vm = vm_record(a.status, a.gas_used, note, logs=[])
+        prompt = build_prompt(s["tx"], vm, ctx, v)
+        sim = SimulatedLLM(s["id"])
+        checked = review(s["tx"], a.status, ctx, note, LLMJudge(sim.complete), vm)
         out.append({"id": s["id"], "title": s["title"], "contract": s["contract"], "sig": s["sig"],
                     "code": j.code.hex(), "calldata": j.calldata.hex(), "rtype": s["rtype"],
                     "storage": {hex(k): hex(v_) for k, v_ in j.storage.items()},
@@ -67,6 +75,10 @@ def main():
                     "verdict": asdict(v)})
         print(f"{s['id']:15s} VM {note:32s} pyevm={'match' if out[-1]['vm']['matches_pyevm'] else 'DIFF'}  "
               f"-> {v.decision.upper():5s} ({v.score}) {'; '.join(v.reasons)}")
+        print(prompt, end="")
+        print(sim.labeled(prompt))
+        print(f"final decision after simulated reply: {checked.decision} (source {checked.source})")
+        print()
     json.dump(out, open("results/judge.json", "w"), indent=1)
 
 

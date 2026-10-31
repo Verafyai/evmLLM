@@ -241,34 +241,82 @@ assert (np.asarray(out) == np.asarray(ref._toks[1:])).all()`;
   $("#scen").innerHTML = D.judge.map((s, i) => `<div class="scard" data-i="${i}"><h4>${esc(s.title)}</h4>
       <div class="d">${esc(s.contract)}.${esc(s.tx.call)}, from ${esc(s.tx.sender.slice(0, 10))}... to ${esc(s.tx.to.slice(0, 10))}...</div>
       <div class="hist">${s.ctx.history.length ? s.ctx.history.map((h) => `${ago(s.tx.t - h.t)} ${esc(h.call)} to ${esc(h.to.slice(0, 10))}...`).join("<br>") : "no history"}</div>
-      <button type="button" class="btn small" style="margin-top:8px">Run VM, then review</button><div class="out"></div></div>`).join("");
+      <button type="button" class="btn small" style="margin-top:8px" data-label="Run VM, then review">Run VM, then review</button><div class="out"></div></div>`).join("");
+  let judgeToken = 0;
+  function scrollInto(el) {
+    if (!el) return;
+    const header = document.querySelector("header.top");
+    const gap = (header ? header.offsetHeight : 0) + 8;
+    const rect = el.getBoundingClientRect();
+    if (rect.top >= gap && rect.bottom <= window.innerHeight && rect.top < window.innerHeight * 0.55) return;
+    window.scrollTo(0, Math.max(0, rect.top + window.scrollY - gap));
+  }
+  async function runScenario(i, sourceBtn) {
+    const token = ++judgeToken;
+    const card = document.querySelector(`.scard[data-i="${i}"]`);
+    const cardBtn = card.querySelector("button");
+    const buttons = sourceBtn && sourceBtn !== cardBtn ? [sourceBtn, cardBtn] : [cardBtn];
+    buttons.forEach((b) => { b.disabled = true; b.textContent = "Running..."; });
+    const out = card.querySelector(".out");
+    const view = $("#prompt-view");
+    out.innerHTML = `<p class="ran-line">Running...</p>`;
+    view.innerHTML = `<p class="ran-line">Running...</p>`;
+    await paint();
+    await delay(120);
+    if (token !== judgeToken) return;
+    try {
+      const s = D.judge[i];
+      const r = E.run({ code: E.hexToBytes(s.code), calldata: E.hexToBytes(s.calldata), storage: s.storage, gas: 1000000 }, { maxTrace: 0 });
+      const note = describe(r.ret, r.status, s.rtype || "uint256");
+      const rulesV = J.rules(s.tx, r.status, s.ctx, note);
+      const vm = { status: r.status, gas_used: r.gasUsed, return_value: note, logs: [] };
+      const prompt = J.buildPrompt(s.tx, vm, s.ctx, rulesV);
+      const sim = J.simulatedReply(s.id);
+      const finalV = await J.review(s.tx, r.status, s.ctx, note, sim ? J.simulatedComplete(s.id) : null, vm);
+      const same = rulesV.decision === s.verdict.decision && rulesV.score === s.verdict.score && rulesV.reasons.join("|") === s.verdict.reasons.join("|");
+      const vmMatch = r.status === s.vm.status && r.gasUsed === s.vm.gas_used;
+      const when = clock();
+      const finalNote = finalV.source === "llm"
+        ? "The simulated answer was stricter, so it stands."
+        : rulesV.source === "vm"
+          ? "The VM already blocked this. The simulated answer is shown and cannot loosen that block."
+          : "The simulated answer is not stricter than the rule check, so the rule decision stands.";
+      out.innerHTML = `<div class="ran-line">Reviewed just now at ${when}</div>
+        <div><b>1. VM (exact):</b> ${esc(note)}, gas ${n(r.gasUsed)} ${vmMatch ? "<span class=ok>(matches the recorded run)</span>" : ""}</div>
+        <div><b>2. Review (rules, heuristic outside the weights):</b> <span class="v ${rulesV.decision}">${rulesV.decision}</span> score ${rulesV.score}${rulesV.source === "vm" ? " (decided by the VM)" : ""}<ul>${rulesV.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+        <div><b>3. Simulated model output:</b> <span class="v ${sim.decision}">${sim.decision}</span> ${esc(sim.reason)}</div>
+        <div class="note">${esc(sim.label)}. The full prompt is below. Recorded rule result: ${esc(s.verdict.decision)} ${s.verdict.score} ${same ? "<span class=ok>(same)</span>" : "<span class=bad>(different)</span>"}.</div>`;
+      view.innerHTML = `<div class="ran-line">Reviewed just now at ${when}</div>
+        <h3>Prompt</h3>
+        <p class="note">Built from the live VM result and this scenario's history. The addresses are placeholders.</p>
+        <pre class="prompt-text"></pre>
+        <h3>Simulated model output</h3>
+        <p class="sim-banner"></p>
+        <pre class="sim-json"></pre>
+        <p><b>Rule check (heuristic outside the weights):</b> <span class="v ${rulesV.decision}">${esc(rulesV.decision)}</span> score ${rulesV.score}</p>
+        <p><b>Final decision:</b> <span class="v ${finalV.decision}">${esc(finalV.decision)}</span> ${esc(finalNote)}</p>`;
+      view.querySelector(".prompt-text").textContent = prompt;
+      view.querySelector(".sim-banner").textContent = sim.label;
+      view.querySelector(".sim-json").textContent = sim.json;
+      flash(out);
+      flash(view);
+    } catch (e) {
+      out.innerHTML = `<p class="bad">${esc(e.message || String(e))}</p>`;
+      view.innerHTML = `<p class="bad">${esc(e.message || String(e))}</p>`;
+    } finally {
+      if (token === judgeToken) buttons.forEach((b) => { b.disabled = false; b.textContent = b.dataset.label; });
+    }
+    if (token === judgeToken) scrollInto(view);
+  }
   document.querySelectorAll(".scard").forEach((el) => {
-    const btn = el.querySelector("button");
-    btn.onclick = async () => {
-      const prev = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = "Running...";
-      const out = el.querySelector(".out");
-      out.innerHTML = `<p class="ran-line">Running...</p>`;
-      await paint();
-      await delay(120);
-      try {
-        const s = D.judge[+el.dataset.i];
-        const r = E.run({ code: E.hexToBytes(s.code), calldata: E.hexToBytes(s.calldata), storage: s.storage, gas: 1000000 }, { maxTrace: 0 });
-        const note = describe(r.ret, r.status, "uint256");
-        const v = await J.review(s.tx, r.status, s.ctx, note, J.stubLLM);
-        const same = v.decision === s.verdict.decision && v.score === s.verdict.score;
-        out.innerHTML = `<div class="ran-line">Reviewed just now at ${clock()}</div><div><b>1. VM (exact):</b> ${esc(note)}, gas ${n(r.gasUsed)} ${r.status === s.vm.status && r.gasUsed === s.vm.gas_used ? "<span class=ok>(matches py-evm run)</span>" : ""}</div>
-        <div><b>2. Review (rules, not in the weights):</b> <span class="v ${v.decision}">${v.decision}</span> score ${v.score}${v.source === "vm" ? " (decided by the VM)" : ""}<ul>${v.reasons.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
-        <div class="note">3. LLM judge: stub, abstained. Python judge.py gave ${s.verdict.decision} ${s.verdict.score} ${same ? "<span class=ok>(same)</span>" : "<span class=bad>(different)</span>"}.</div>`;
-        flash(out);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = prev;
-      }
-      scrollSmall(out);
-    };
+    el.querySelector("button").onclick = () => runScenario(+el.dataset.i, el.querySelector("button"));
   });
+  const runExample = (id, btn) => {
+    const i = D.judge.findIndex((s) => s.id === id);
+    if (i >= 0) runScenario(i, btn);
+  };
+  $("#ex-call").onclick = () => runExample(J.EXAMPLE_CALL, $("#ex-call"));
+  $("#ex-withdraw").onclick = () => runExample(J.EXAMPLE_WITHDRAW, $("#ex-withdraw"));
 
   // ---------- results ----------
   const rows = [["Demo runs (23 inputs, 10 contracts), firmware vs py-evm", `${st.demos_ok}/${st.demos_n}`, "status, return data, gas, storage"],

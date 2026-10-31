@@ -97,12 +97,161 @@ All sources are in [`contracts/Demos.sol`](contracts/Demos.sol). The numbers com
 
 ## Judgement filter
 
+The flow is `transaction -> VM circuits (exact result) -> prompt wrapper -> LLM judge -> allow / hold / block`.
 
-The flow is `transaction -> exact EVM run -> rule-based review -> optional LLM judge -> allow / hold / block`.
+<p align="center"><img src="assets/judge-handoff.png" alt="Simulated handoff: a transaction goes to the VM circuits for an exact smart-contract result, is handed over into a prompt, and a simulated LLM judge answers allow, hold or block. No real language model was called." width="820"></p>
 
-- The VM result is never changed. If the code reverts, the review just reports it.
-- The review (`evmllm/judge.py`, ported to `judge.js` on the site) is ordinary code and **not part of the weights**. It scores the amount against the account's history (median size), whether the destination was seen before, bursts of withdrawals within 10 minutes, the share of the contract cap and of the balance moved.
-- `LLMJudge` is a pluggable interface: pass any `complete(prompt) -> str` function. The default stub abstains. An LLM can only make a decision stricter, never looser.
+### How the handoff works
+
+1. A transaction arrives.
+2. The VM circuits run the contract exactly and produce an exact result (status, return value, gas, and logs).
+3. That result is wrapped into the prompt, together with what is known about the sender and the receiver and the run rules.
+4. The LLM reviews the prompt and answers allow, hold or block, with a reason.
+5. The decision is final. It can only get stricter than the rule verdict, never looser.
+
+In this repository the VM runs in hand-set weights (compiled, not trained), and the judge prompt output is simulated. No real LLM was called. The single merged model that does both the exact run and the language review is future work, and it has not been tested.
+
+- The VM result is never changed. If the code reverts, the review just reports it. This VM build does not record event logs, so the prompt says `logs: none`.
+- The review (`evmllm/judge.py`, ported to `judge.js` on the site) is ordinary code and **not part of the weights**. It scores the amount against the account's history (median size), whether the destination was seen before, bursts of withdrawals within 10 minutes, the share of the contract cap and of the balance moved. The rule-based review is a heuristic outside the weights.
+- `LLMJudge` is a pluggable interface: pass any `complete(prompt) -> str` function that returns JSON `{"decision", "reason"}`. Examples, the demo site and the tests use `SimulatedLLM`, which returns canned JSON and is labeled `SIMULATED model output, no real LLM was called`. An LLM can only make a decision stricter, never looser. With no complete function, the judge abstains and the rules decide.
+- A parity test checks that the JavaScript prompt and the canned replies match the Python ones for all five scenarios.
+
+### Worked example: calling a contract
+
+Wallet `0xa11c...1ce0` has requested calling this smart contract. Based on everything you know about the context and the run rules, is this allowed?
+
+This is the ordinary token transfer in the scenarios below (placeholder addresses). The canned answer allows it.
+
+```text
+Role
+You are the transaction reviewer for a wallet. The VM has already run the contract exactly. Decide allow, hold or block based on everything you know about the sender and receiver and the run rules. You may only make the decision stricter, never looser than the rule verdict.
+
+Transaction request
+Wallet 0xa11c...1ce0 has requested calling contract 0xc0de...c0de function transfer(3 tokens).
+Wallet 0xa11c...1ce0 has requested calling this smart contract. Based on everything you know about the context and the run rules, is this allowed?
+
+VM result (exact)
+The VM circuits already ran this contract. This result is exact. It is handed over here, into this prompt.
+status: success
+return value: returns 97000000000000000000
+gas: 10,924
+logs: none
+
+Sender and receiver
+sender: 0xa11ce00000000000000000000000000000a11ce0
+receiver: 0xb0b0000000000000000000000000000000000b0b
+contract: Token at 0xc0de00000000000000000000000000000000c0de
+
+Sender history
+- transfer(2 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 2 tokens, 30d earlier
+- transfer(3 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 3 tokens, 25d earlier
+- transfer(2.5 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 2.5 tokens, 20d earlier
+- transfer(3 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 3 tokens, 15d earlier
+- transfer(4 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 4 tokens, 10d earlier
+
+Receiver history
+- transfer(2 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 2 tokens, 30d earlier
+- transfer(3 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 3 tokens, 25d earlier
+- transfer(2.5 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 2.5 tokens, 20d earlier
+- transfer(3 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 3 tokens, 15d earlier
+- transfer(4 tokens) from 0xa11ce00000000000000000000000000000a11ce0 to 0xb0b0000000000000000000000000000000000b0b, 4 tokens, 10d earlier
+
+Known destinations: 0xb0b0000000000000000000000000000000000b0b
+Balance: 100 tokens
+Cap: not recorded
+
+Run rules
+Compare the amount with the usual size (the median of this sender's past calls). 100 times the usual size or more adds 45. 20 times or more adds 30. 5 times or more adds 10. No history adds 10.
+A destination that has never been seen adds 20.
+4 or more withdrawals within 10 minutes adds 25. If that burst would drain over half the balance, add 25 more.
+90 percent or more of the contract cap in one call adds 20.
+Emptying 90 percent or more of the balance adds 15.
+A score of 60 or more blocks. A score of 30 or more holds. Otherwise the rules allow.
+If the VM status is not success, the decision is block, because the code itself rejected the call.
+The reviewer may only make the decision stricter, never looser than the rule verdict.
+Rule verdict: allow (score 0)
+Reasons: in line with history, known destination
+
+Reply format
+Reply with JSON only, one object: {"decision": "allow" or "hold" or "block", "reason": "one sentence"}
+```
+
+```text
+SIMULATED model output, no real LLM was called
+{"decision": "allow", "reason": "This sender has transferred about 2 to 4 tokens to this same destination several times. A transfer of 3 tokens matches that history, and the run rules allow it."}
+```
+
+### Worked example: a withdrawal
+
+Wallet `0xa11c...1ce0` would like to withdraw 450 ETH. Based on everything you know about the context and the run rules, should that be allowed?
+
+This is the vault withdrawal in the scenarios below. The canned answer blocks it. The reason cites the history: the amount versus the usual size, and a destination that has never been seen.
+
+```text
+Role
+You are the transaction reviewer for a wallet. The VM has already run the contract exactly. Decide allow, hold or block based on everything you know about the sender and receiver and the run rules. You may only make the decision stricter, never looser than the rule verdict.
+
+Transaction request
+Wallet 0xa11c...1ce0 has requested calling contract 0xc0ff...ffee function withdraw(450 ETH).
+Wallet 0xa11c...1ce0 would like to withdraw 450 ETH. Based on everything you know about the context and the run rules, should that be allowed?
+
+VM result (exact)
+The VM circuits already ran this contract. This result is exact. It is handed over here, into this prompt.
+status: success
+return value: returns 1550000000000000000000
+gas: 7,706
+logs: none
+
+Sender and receiver
+sender: 0xa11ce00000000000000000000000000000a11ce0
+receiver: 0x7e5700000000000000000000000000000000bad0
+contract: Vault at 0xc0ffee0000000000000000000000000000c0ffee
+
+Sender history
+- withdraw(4 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 4 ETH, 90d earlier
+- withdraw(4.5 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 4.5 ETH, 83d earlier
+- withdraw(3.8 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 3.8 ETH, 76d earlier
+- withdraw(4.2 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 4.2 ETH, 69d earlier
+- withdraw(4 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 4 ETH, 62d earlier
+- withdraw(4.1 ETH) from 0xa11ce00000000000000000000000000000a11ce0 to 0x9a7b000000000000000000000000000000009a7b, 4.1 ETH, 55d earlier
+
+Receiver history
+- none
+
+Known destinations: 0x9a7b000000000000000000000000000000009a7b
+Balance: 2,000 ETH
+Cap: not recorded
+
+Run rules
+Compare the amount with the usual size (the median of this sender's past calls). 100 times the usual size or more adds 45. 20 times or more adds 30. 5 times or more adds 10. No history adds 10.
+A destination that has never been seen adds 20.
+4 or more withdrawals within 10 minutes adds 25. If that burst would drain over half the balance, add 25 more.
+90 percent or more of the contract cap in one call adds 20.
+Emptying 90 percent or more of the balance adds 15.
+A score of 60 or more blocks. A score of 30 or more holds. Otherwise the rules allow.
+If the VM status is not success, the decision is block, because the code itself rejected the call.
+The reviewer may only make the decision stricter, never looser than the rule verdict.
+Rule verdict: block (score 65)
+Reasons: 111x the usual size (median 4.05 ETH); destination 0x7e5700000000000000000000000000000000bad0 never seen before
+
+Reply format
+Reply with JSON only, one object: {"decision": "allow" or "hold" or "block", "reason": "one sentence"}
+```
+
+<p align="center"><img src="assets/judge-prompt-card.png" alt="Simulated prompt card for a withdrawal: the prompt wraps the exact VM result, and the simulated model output blocks it because the amount is far above the usual size and the destination was never seen. No real language model was called." width="820"></p>
+
+```text
+SIMULATED model output, no real LLM was called
+{"decision": "block", "reason": "Usual withdrawals from this sender are about 4 ETH to one known address. This call withdraws 450 ETH, about 111 times that size, and the destination has never been seen, so it should be blocked."}
+```
+
+### The other canned replies
+
+Same prompt shape, still simulated, still no model call:
+
+- `rapid-drain`: `{"decision": "block", "reason": "Three withdrawals of 490 ETH already happened in the last few minutes, and this call takes another 490 ETH. Together that is 1,960 ETH and would drain most of the balance, so it should be blocked."}`
+- `near-cap`: `{"decision": "hold", "reason": "Past spends were about 35 to 42 million USD. This call spends 950 million USD, about 24 times the usual size and 95 percent of the cap, so it should be held for a person to review."}`
+- `over-cap`: `{"decision": "block", "reason": "The VM result is a revert because the call exceeds the cap. The code itself rejected it, so the decision is block."}`
 
 Five scenarios with synthetic histories (`PYTHONPATH=. python -m evmllm.judge_examples`). Every VM run matches py-evm:
 
@@ -113,6 +262,7 @@ Five scenarios with synthetic histories (`PYTHONPATH=. python -m evmllm.judge_ex
 | Rapid repeated withdrawals, each one within the limit | `withdraw(490 ETH)` | returns 40000000000000000000 | **BLOCK** (65) | 4 withdrawals in 10 minutes (1,960 ETH total); pattern would drain over half the balance; empties 90%+ of the balance |
 | Spend under the $1B cap, but 95% of it in one call | `spend($950,000,000)` | returns 950000000000000 | **HOLD** (50) | 24x the usual size (median 39.0M USD); 95% of the contract cap in one call |
 | Spend over the $1B cap: the code itself reverts | `spend($1,200,000,000)` | revert: exceeds $1B cap | **BLOCK** (100) | VM: revert: exceeds $1B cap; the code itself rejected it, nothing to review |
+
 
 ## Quickstart
 
@@ -189,14 +339,14 @@ Runs on the compiled weights (each generated token fed back as the next input):
 firmware/        evm.c (the EVM, 256-bit words as 8 x 32-bit limbs), crt0, linker script, build.sh, evm.elf
 evmllm/host.py   job packing, reference-machine runner, py-evm runner, result parsing
 evmllm/demos.py  the 10 contracts and 23 demo inputs
-evmllm/judge.py  judgement filter (rules + pluggable LLM judge stub); judge_examples.py has 5 scenarios
+evmllm/judge.py  judgement filter (rules, prompt builder, simulated replies; a real model plugs in); judge_examples.py has 5 scenarios
 evmllm/export_site.py   writes site/data.js from real runs
 site/            static demo (index.html, app.js, evm.js, judge.js, style.css, generated data.js)
 contracts/       Demos.sol and compiled artifacts (solc 0.8.24)
 tests/           demos_ref.py, fuzz.py, divtest.py, circuit_run.py, export_corpus.py, check_js_vm.js
 examples/        run_on_weights.py
 results/         JSON outputs of the runs above
-assets/          logo, mark, favicon, social card
+assets/          logo, mark, favicon, social card, judgement and judge-prompt graphics
 qwenputer-cpu.patch   two-line fastexec fix for the standalone chip
 ```
 
@@ -234,7 +384,7 @@ The judgement filter is illustrative heuristics on synthetic histories, not a se
 - **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should be much faster; this has not been measured yet.
 - **A chat bridge.** A small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation and read back exact results, with the judgement filter as an in-context reviewer.
 - **More of the EVM.** KECCAK256 (unlocks Solidity mappings), LOG, SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, larger memory and storage, and multi-call state.
-- **Smarter review.** A real LLM judge behind the `LLMJudge` interface, richer history features, and per-protocol policies.
+- **Smarter review.** A real model behind the `LLMJudge` interface (examples use the simulated replies), richer history features, and per-protocol policies.
 
 ## Future steps
 

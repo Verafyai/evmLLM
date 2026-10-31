@@ -21,7 +21,7 @@
   <a class="brand" href="#"><img src="assets/evmllm-mark.png" alt="" width="34" height="34"><span><b>EVM</b><i>LLM</i></span></a>
   <nav>
     <a href="#how">How it works</a><a href="#demos">Demos</a><a href="#own">Your bytecode</a>
-    <a href="#judge">Judgement filter</a><a href="#results">Results</a><a href="#code">Code</a><a href="#where">Where it runs</a>
+    <a href="#judge">Judgement filter</a><a href="#judge-prompt">Judge prompt</a><a href="#results">Results</a><a href="#code">Code</a><a href="#where">Where it runs</a>
     <a class="gh" href="https://github.com/Verafyai/evmLLM">GitHub</a>
   </nav>
 </header>
@@ -107,11 +107,55 @@
     <div class="fbox">Transaction</div><div class="farrow"></div>
     <div class="fbox exact">EVM run<small>exact, deterministic</small></div><div class="farrow"></div>
     <div class="fbox review">Rule-based review<small>NOT part of the weights</small></div><div class="farrow"></div>
-    <div class="fbox review">LLM judge (optional)<small>pluggable, stub by default</small></div><div class="farrow"></div>
+    <div class="fbox review">LLM judge<small>simulated reply, real model plugs in</small></div><div class="farrow"></div>
     <div class="fbox verdict"><span class="v allow">allow</span><span class="v hold">hold</span><span class="v block">block</span></div>
   </div>
-  <p class="sub">The VM decides what the code allows, exactly. The review then looks at amount, destination and history and returns allow, hold for a human, or block, with a reason. An LLM judge can only make a decision stricter, never looser. The scenarios below use synthetic histories.</p>
+  <p class="sub">The VM decides what the code allows, exactly. The review then looks at amount, destination and history and returns allow, hold for a human, or block, with a reason. An LLM judge can only make a decision stricter, never looser. The scenarios use synthetic histories. The rule-based review is a heuristic outside the weights.</p>
+</section>
+
+<section id="judge-prompt">
+  <h2>How the judge prompt works</h2>
+  <p class="sub">The contract runs first, exactly. The result is then handed to a reviewer, wrapped in a prompt. The prompt asks a plain question: given everything known about the sender and the receiver, and the rules for this run, should this go through?</p>
+  <div class="handoff" role="img" aria-label="Simulated handoff. A transaction goes to the VM circuits for an exact smart-contract result, is handed over into a prompt, and a simulated LLM judge answers allow, hold or block. No real language model is called.">
+    <div class="hbox">Transaction<small>A wallet asks to call a contract</small></div>
+    <div class="harrow" aria-hidden="true">
+      <svg class="harrow-right" width="28" height="16" viewBox="0 0 28 16"><line x1="0" y1="8" x2="18" y2="8" stroke="#1a5fd0" stroke-width="2"/><polyline points="16,3 24,8 16,13" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="harrow-down" width="16" height="22" viewBox="0 0 16 22"><line x1="8" y1="0" x2="8" y2="12" stroke="#1a5fd0" stroke-width="2"/><polyline points="3,12 8,18 13,12" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="hbox exact">VM circuits<small>Exact smart-contract result</small></div>
+    <div class="harrow handed">
+      <svg class="harrow-right" width="28" height="16" viewBox="0 0 28 16"><line x1="0" y1="8" x2="18" y2="8" stroke="#1a5fd0" stroke-width="2.5"/><polyline points="16,3 24,8 16,13" fill="none" stroke="#1a5fd0" stroke-width="2.5" stroke-linejoin="round"/></svg>
+      <svg class="harrow-down" width="16" height="22" viewBox="0 0 16 22"><line x1="8" y1="0" x2="8" y2="12" stroke="#1a5fd0" stroke-width="2.5"/><polyline points="3,12 8,18 13,12" fill="none" stroke="#1a5fd0" stroke-width="2.5" stroke-linejoin="round"/></svg>
+      <span>handed over here</span>
+    </div>
+    <div class="hbox">Prompt wrapper<small>The result, the history, and the rules</small></div>
+    <div class="harrow" aria-hidden="true">
+      <svg class="harrow-right" width="28" height="16" viewBox="0 0 28 16"><line x1="0" y1="8" x2="18" y2="8" stroke="#1a5fd0" stroke-width="2"/><polyline points="16,3 24,8 16,13" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="harrow-down" width="16" height="22" viewBox="0 0 16 22"><line x1="8" y1="0" x2="8" y2="12" stroke="#1a5fd0" stroke-width="2"/><polyline points="3,12 8,18 13,12" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="hbox sim">LLM judge<span class="simtag">SIMULATED</span><small>Allow, hold or block, with a reason</small></div>
+    <div class="harrow" aria-hidden="true">
+      <svg class="harrow-right" width="28" height="16" viewBox="0 0 28 16"><line x1="0" y1="8" x2="18" y2="8" stroke="#1a5fd0" stroke-width="2"/><polyline points="16,3 24,8 16,13" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="harrow-down" width="16" height="22" viewBox="0 0 16 22"><line x1="8" y1="0" x2="8" y2="12" stroke="#1a5fd0" stroke-width="2"/><polyline points="3,12 8,18 13,12" fill="none" stroke="#1a5fd0" stroke-width="2" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="hbox">Decision<small><span class="v allow">allow</span><span class="v hold">hold</span><span class="v block">block</span></small></div>
+  </div>
+  <ol class="steps">
+    <li>A transaction arrives.</li>
+    <li>The VM circuits run the smart contract and keep the exact result.</li>
+    <li>That result is wrapped into the prompt, with the sender and receiver history and the run rules.</li>
+    <li>The reviewer reads the prompt and answers allow, hold or block, with a reason.</li>
+    <li>The decision is final. It can only get stricter than the rule check, never looser.</li>
+  </ol>
+  <p>The rule-based review is a heuristic outside the weights. This page does not call a real language model. The answer under the prompt is a prepared stand-in, labeled simulated. A single model that both runs the contract and writes the review has not been built or tested.</p>
+  <div class="prompt-actions">
+    <button type="button" class="btn" id="ex-call" data-label="Run the contract-call example">Run the contract-call example</button>
+    <button type="button" class="btn ghost" id="ex-withdraw" data-label="Run the withdrawal example">Run the withdrawal example</button>
+  </div>
   <div class="scen" id="scen"></div>
+  <div id="prompt-view" class="prompt-view">
+    <p class="note">Run a scenario, or one of the example buttons, to see the prompt built from that live result and the simulated answer under it.</p>
+  </div>
 </section>
 
 <section id="results">
