@@ -4,7 +4,7 @@
 
 EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, SwiGLU feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. Ten Solidity contracts run on it, every result is checked against py-evm, and a separate judgement filter shows how an exact VM and a context-aware reviewer can work together.
 
-**Demo site:** the static site in the companion `evllm-site` folder (open `index.html`) has ten runnable contracts, an animated walkthrough of a real trace, a paste-your-own-bytecode box and the judgement filter.
+**Live demo:** [evmllm.rexstjohn.com](https://evmllm.rexstjohn.com) has ten runnable contracts, an animated walkthrough of a real trace, a paste-your-own-bytecode box and the judgement filter. Sibling project: [SVMLLM](https://github.com/Verafyai/svmLLM), a Solana sBPF VM in hand-built weights ([svmllm.rexstjohn.com](https://svmllm.rexstjohn.com)).
 
 ---
 
