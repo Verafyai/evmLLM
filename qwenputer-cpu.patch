@@ -1,0 +1,13 @@
+diff --git a/experimental/riscv/chipformer/rv/fastexec.py b/experimental/riscv/chipformer/rv/fastexec.py
+index 26c82f1..683c392 100644
+--- a/experimental/riscv/chipformer/rv/fastexec.py
++++ b/experimental/riscv/chipformer/rv/fastexec.py
+@@ -266,6 +266,8 @@ class FreeRun:
+         ids = np.zeros(nf, dtype=np.int64)
+         small, row0, table = np.zeros(nf, dtype=bool), np.zeros(nf, dtype=np.int64), []
+         for f, nm in enumerate(C.OUT_NAMES):
++            if nm not in S.CONTROLS and nm not in S.FAMILIES:  # evm-in-llm patch: text family (P3), absent standalone
++                nm = "NT"
+             t0 = S.tok(nm) if nm in S.CONTROLS else S.tok(nm, 0)
+             size = 1 if nm in S.CONTROLS else S.FAMILIES[nm][1]
+             ids[f] = t0
