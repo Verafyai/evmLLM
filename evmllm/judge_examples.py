@@ -17,7 +17,7 @@ def hist(to, amounts, unit, start, gap, call):
 
 
 SCENARIOS = [
-    dict(id="whale-new-dest", title="Valid withdrawal, 100x usual size, never-seen address",
+    dict(id="whale-new-dest", title="Valid withdrawal, 111x usual size, never-seen address",
          contract="Vault", sig="withdraw(uint256)", args=[450 * E], rtype="uint256",
          storage={0: 2000 * E, 1: 500 * E},
          tx=Tx("Vault", "withdraw(450 ETH)", A["ops"], A["unknown"], 450, "ETH", T0 + 90 * 86400),

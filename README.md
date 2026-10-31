@@ -1,25 +1,24 @@
 <p align="center"><img src="assets/evmllm-logo.png" alt="EVMLLM" width="360"></p>
 
-<h1 align="center">EVMLLM</h1>
 <p align="center"><b>An Ethereum VM executed by transformer weights.</b><br>
 Solidity contracts run on a RISC-V CPU that lives in compiled transformer layers: exact results, exact gas, zero training.</p>
-<p align="center"><a href="https://evmllm.rexstjohn.com">Live demo: evmllm.rexstjohn.com</a> | <a href="https://github.com/Verafyai/evmLLM">github.com/Verafyai/evmLLM</a> | Sibling project: <a href="https://github.com/Verafyai/svmLLM">SVMLLM</a> (<a href="https://svmllm.rexstjohn.com">svmllm.rexstjohn.com</a>)</p>
+<p align="center"><a href="https://evmllm.rexstjohn.com">Live demo: evmllm.rexstjohn.com</a> | <a href="https://github.com/Verafyai/evmLLM">github.com/Verafyai/evmLLM</a> | Sibling project: <a href="https://svmllm.rexstjohn.com">SVMLLM</a></p>
 
 ---
 
 ## The pitch
 
-EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. The EVM is not hand-built into the weights: it is firmware, and the CPU that runs it is Qwenputer's. Ten Solidity contracts run on it, and every result is checked against py-evm.
+EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](#credits), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. The EVM is not hand-built into the weights: it is firmware, and the CPU that runs it is Qwenputer's. Ten Solidity contracts run on it, and every result is checked against py-evm.
 
 On top of the VM sits a **judgement filter**: after the contract has run, a separate review step looks at the amount, the destination and the history, and returns allow, hold or block with a reason.
 
 ## Why: code that does exactly what it says
 
-Some of the costliest smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That first kind is what motivated this project: fuse the best of smart contracts (trustless, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
+Some smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That first kind is what motivated this project: fuse the best of smart contracts (trustless, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
 
 A transformer that can execute contract bytecode exactly is a step toward a single model that both runs the program deterministically and reasons about whether the result makes sense.
 
-<p align="center"><img src="assets/judgement-check.png" alt="Judgement check: the contract runs in the VM, the exact result says it is valid by the code, and a separate heuristic check outside the weights blocks a withdrawal 100x the usual size to a never-seen address" width="820"></p>
+<p align="center"><img src="assets/judgement-check.png" alt="Judgement check: the contract runs in the VM, the exact result says it is valid by the code, and a separate heuristic check outside the weights blocks a withdrawal 111x the usual size to a never-seen address" width="820"></p>
 
 ---
 
@@ -109,7 +108,7 @@ Five scenarios with synthetic histories (`PYTHONPATH=. python -m evmllm.judge_ex
 
 | Scenario | Call | VM | Verdict | Reasons |
 |---|---|---|---|---|
-| Valid withdrawal, 100x usual size, never-seen address | `withdraw(450 ETH)` | returns 1550000000000000000000 | **BLOCK** (65) | 111x the usual size (median 4.05 ETH); destination 0x7e5700000000000000000000000000000000bad0 never seen before |
+| Valid withdrawal, 111x usual size, never-seen address | `withdraw(450 ETH)` | returns 1550000000000000000000 | **BLOCK** (65) | 111x the usual size (median 4.05 ETH); destination 0x7e5700000000000000000000000000000000bad0 never seen before |
 | Ordinary transfer to a known address | `transfer(3 tokens)` | returns 97000000000000000000 | **ALLOW** (0) | in line with history, known destination |
 | Rapid repeated withdrawals, each one within the limit | `withdraw(490 ETH)` | returns 40000000000000000000 | **BLOCK** (65) | 4 withdrawals in 10 minutes (1,960 ETH total); pattern would drain over half the balance; empties 90%+ of the balance |
 | Spend under the $1B cap, but 95% of it in one call | `spend($950,000,000)` | returns 950000000000000 | **HOLD** (50) | 24x the usual size (median 39.0M USD); 95% of the contract cap in one call |
@@ -137,7 +136,7 @@ PYTHONPATH=. python examples/run_on_weights.py    # a small program on the compi
 PYTHONPATH=. python examples/run_on_weights.py --row 10   # gcd(1071, 462) on the weights
 THREADS=4 PYTHONPATH=. python -u tests/circuit_run.py 0 3 10   # batched demo rows on the weights
 PYTHONPATH=. python -m evmllm.judge_examples      # judgement filter scenarios
-PYTHONPATH=. python -m evmllm.export_site ../evllm-site   # regenerate the site's data.js
+PYTHONPATH=. python -m evmllm.export_site path/to/site   # write data.js into the demo site folder (the site is not in this repo)
 ```
 
 Running on the weights, in short:
@@ -265,9 +264,9 @@ Drop me some ETH if you want to support me to keep working on this.
 
 ## Credits
 
-- **Qwenputer** by Divyansh Agrawal ([@divagr1925](https://x.com/divagr1925/status/2115394340357116169)): [blog post](https://divagr.com/blog/qwenputer), [weights on Hugging Face](https://huggingface.co/divagr1925/Qwen3.5-4B-Qwenputer), [code](https://github.com/divagr18/qwenputer) (MIT). EVMLLM would not exist without it: the CPU in the weights, the chipformer compiler, the reference machine and the fastexec executor are all Qwenputer's.
+- **Qwenputer** by Divyansh Agrawal, [@divagr1925](https://x.com/divagr1925) on X: [blog post](https://divagr.com/blog/qwenputer), [weights on Hugging Face](https://huggingface.co/divagr1925/Qwen3.5-4B-Qwenputer), [code](https://github.com/divagr18/qwenputer) (MIT). EVMLLM would not exist without it: the CPU in the weights, the chipformer compiler, the reference machine and the fastexec executor are all Qwenputer's.
 - **py-evm** (Ethereum Foundation) as the reference EVM, **solc** for compilation.
-- Sibling project: [SVMLLM](https://github.com/Verafyai/svmLLM), a Solana sBPF VM in hand-built weights ([svmllm.rexstjohn.com](https://svmllm.rexstjohn.com)).
+- Sibling project: [SVMLLM](https://svmllm.rexstjohn.com), a Solana sBPF VM in hand-built weights. Code: [Verafyai/svmLLM](https://github.com/Verafyai/svmLLM).
 
 ## License
 
