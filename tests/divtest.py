@@ -35,3 +35,4 @@ for _ in range(400):
         bad += 1
         print("BAD", hex(a), hex(b))
 print(f"div/mod: {n - bad}/{n} correct")
+__import__("json").dump({"n": n, "pass": n - bad}, open("results/divtest.json", "w"))

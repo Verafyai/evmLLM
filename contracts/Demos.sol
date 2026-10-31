@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-// Ten demo contracts for evllm. No mappings: storage is fixed slots and fixed-size arrays,
+// Ten demo contracts for EVMLLM. No mappings: storage is fixed slots and fixed-size arrays,
 // because the in-weights EVM build has no KECCAK256 yet.
 
 /// 1. Spend cap: amounts are USD with 6 decimals (like USDC). Anything over $1B reverts.

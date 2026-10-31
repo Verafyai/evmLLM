@@ -2,3 +2,9 @@
 __pycache__/
 *.pyc
 results/*.tokens.npy
+results/*.log
+*.egg-info/
+.DS_Store
+.env
+*.pem
+*.key
