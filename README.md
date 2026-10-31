@@ -136,7 +136,7 @@ PYTHONPATH=. python examples/run_on_weights.py    # a small program on the compi
 PYTHONPATH=. python examples/run_on_weights.py --row 10   # gcd(1071, 462) on the weights
 THREADS=4 PYTHONPATH=. python -u tests/circuit_run.py 0 3 10   # batched demo rows on the weights
 PYTHONPATH=. python -m evmllm.judge_examples      # judgement filter scenarios
-PYTHONPATH=. python -m evmllm.export_site path/to/site   # write data.js into the demo site folder (the site is not in this repo)
+PYTHONPATH=. python -m evmllm.export_site            # rewrite site/data.js from real runs. Do not edit site/data.js by hand.
 ```
 
 Running on the weights, in short:
@@ -190,7 +190,8 @@ firmware/        evm.c (the EVM, 256-bit words as 8 x 32-bit limbs), crt0, linke
 evmllm/host.py   job packing, reference-machine runner, py-evm runner, result parsing
 evmllm/demos.py  the 10 contracts and 23 demo inputs
 evmllm/judge.py  judgement filter (rules + pluggable LLM judge stub); judge_examples.py has 5 scenarios
-evmllm/export_site.py   writes the site's data.js from real runs
+evmllm/export_site.py   writes site/data.js from real runs
+site/            static demo (index.html, app.js, evm.js, judge.js, style.css, generated data.js)
 contracts/       Demos.sol and compiled artifacts (solc 0.8.24)
 tests/           demos_ref.py, fuzz.py, divtest.py, circuit_run.py, export_corpus.py, check_js_vm.js
 examples/        run_on_weights.py
