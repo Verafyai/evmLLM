@@ -1,0 +1,32 @@
+{
+ "elapsed_s": 875.7,
+ "runs": [
+  {
+   "row": 5,
+   "demo": 3,
+   "contract": "Fibonacci",
+   "input": "fib(10)",
+   "tokens": 45350,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 7,
+   "demo": 4,
+   "contract": "Factorial",
+   "input": "10!",
+   "tokens": 57932,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 13,
+   "demo": 6,
+   "contract": "Prime",
+   "input": "91",
+   "tokens": 51344,
+   "match": true,
+   "first_mismatch": null
+  }
+ ]
+}

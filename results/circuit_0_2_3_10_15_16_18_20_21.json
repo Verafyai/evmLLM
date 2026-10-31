@@ -1,0 +1,86 @@
+{
+ "elapsed_s": 961.3,
+ "runs": [
+  {
+   "row": 0,
+   "demo": 1,
+   "contract": "SpendCap",
+   "input": "$250,000",
+   "tokens": 16686,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 2,
+   "demo": 1,
+   "contract": "SpendCap",
+   "input": "$1,000,000,001 (over cap)",
+   "tokens": 16806,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 3,
+   "demo": 2,
+   "contract": "Counter",
+   "input": "add 1 to 41",
+   "tokens": 16369,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 10,
+   "demo": 5,
+   "contract": "GCD",
+   "input": "gcd(1071, 462)",
+   "tokens": 19519,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 15,
+   "demo": 7,
+   "contract": "Token",
+   "input": "account 0 sends 30 to 1",
+   "tokens": 30457,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 16,
+   "demo": 7,
+   "contract": "Token",
+   "input": "account 1 sends 6 to 0 (short)",
+   "tokens": 23710,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 18,
+   "demo": 8,
+   "contract": "Vault",
+   "input": "withdraw 600 (over limit)",
+   "tokens": 18243,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 20,
+   "demo": 9,
+   "contract": "Voting",
+   "input": "voter 2 votes again (rejected)",
+   "tokens": 25679,
+   "match": true,
+   "first_mismatch": null
+  },
+  {
+   "row": 21,
+   "demo": 10,
+   "contract": "Escrow",
+   "input": "code 424242",
+   "tokens": 16460,
+   "match": true,
+   "first_mismatch": null
+  }
+ ]
+}

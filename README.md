@@ -151,9 +151,24 @@ assert (out == ref._toks[1:]).all()
 | 256-bit DIV/MOD, firmware vs Python ints | **400/400** | quotient and remainder, multi-limb divisors |
 | Browser VM (`evm.js`) vs py-evm corpus | **2023/2023** | the 23 demos plus the 2000 fuzz cases |
 | Judgement filter, JS port vs Python | **5/5** | VM result, verdict, score, reasons |
-| Runs on the compiled weights (fastexec, CPU) | **pending** | every generated token vs the reference trace |
+| Runs on the compiled weights (fastexec, CPU) | **12/12 runs, 338,555 tokens** | every generated token vs the reference trace |
 
+Runs on the compiled weights (each generated token fed back as the next input):
 
+| Contract | Input | Tokens | Result |
+|---|---|---|---|
+| SpendCap | $250,000 | 16,686 | exact match |
+| SpendCap | $1,000,000,001 (over cap) | 16,806 | exact match |
+| Counter | add 1 to 41 | 16,369 | exact match |
+| Fibonacci | fib(10) | 45,350 | exact match |
+| Factorial | 10! | 57,932 | exact match |
+| GCD | gcd(1071, 462) | 19,519 | exact match |
+| Prime | 91 | 51,344 | exact match |
+| Token | account 0 sends 30 to 1 | 30,457 | exact match |
+| Token | account 1 sends 6 to 0 (short) | 23,710 | exact match |
+| Vault | withdraw 600 (over limit) | 18,243 | exact match |
+| Voting | voter 2 votes again (rejected) | 25,679 | exact match |
+| Escrow | code 424242 | 16,460 | exact match |
 
 ## Repository layout
 
