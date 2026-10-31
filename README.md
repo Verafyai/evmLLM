@@ -112,8 +112,8 @@ git -C /tmp/qwp checkout f07a0b2
 git -C /tmp/qwp apply "$PWD/qwenputer-cpu.patch"
 
 sudo apt install gcc-riscv64-unknown-elf          # only needed to rebuild the firmware
-python -m venv .venv && . .venv/bin/activate
-pip install torch numpy py-evm eth-abi py-solc-x pillow -e /tmp/qwp/experimental/riscv
+python3 -m venv .venv && . .venv/bin/activate
+pip install torch numpy py-evm eth-abi py-solc-x -e /tmp/qwp/experimental/riscv
 
 ./firmware/build.sh                               # C EVM -> firmware/evm.elf (a prebuilt ELF is included)
 PYTHONPATH=. python tests/demos_ref.py            # 23 demo runs vs py-evm
