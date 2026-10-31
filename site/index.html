@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVMLLM: an Ethereum VM executed by transformer weights</title>
+<meta name="description" content="EVMLLM runs Ethereum smart contracts on a CPU that is compiled into transformer weights (Qwenputer). Ten runnable demo contracts, real traces, a judgement filter, and honest test results.">
+<meta property="og:title" content="EVMLLM: an Ethereum VM executed by transformer weights">
+<meta property="og:description" content="Smart contracts on a CPU compiled into transformer weights, with real traces checked against a reference EVM.">
+<meta property="og:image" content="assets/og.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="assets/og.png">
+<link rel="icon" href="assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/mark-32.png">
+<link rel="apple-touch-icon" href="assets/mark-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#"><img src="assets/evmllm-mark.png" alt="" width="34" height="34"><span><b>EVM</b><i>LLM</i></span></a>
+  <nav>
+    <a href="#how">How it works</a><a href="#demos">Demos</a><a href="#own">Your bytecode</a>
+    <a href="#judge">Judgement filter</a><a href="#results">Results</a><a href="#code">Code</a><a href="#where">Where it runs</a>
+    <a class="gh" href="https://github.com/Verafyai/evmLLM">GitHub</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <img class="hero-logo" src="assets/evmllm-logo.png" alt="EVMLLM logo">
+  <h1>An Ethereum VM executed by transformer weights</h1>
+  <p class="lead">EVMLLM is an EVM interpreter compiled to RV32IM and run on <a href="https://divagr.com/blog/qwenputer">Qwenputer</a>, a RISC-V CPU whose every weight was set by a compiler: attention heads fetch and decode, feed-forward units do the arithmetic, and Gated DeltaNet heads hold exact RAM. Ten Solidity contracts run on it, and every result here is checked against a reference EVM.</p>
+  <div class="cta"><a class="btn" href="#demos">Run the demos</a><a class="btn ghost" href="https://github.com/Verafyai/evmLLM">GitHub: Verafyai/evmLLM</a><a class="btn ghost" href="https://divagr.com/blog/qwenputer">Based on Qwenputer</a></div>
+  <div class="chips" id="chips"></div>
+  <div class="honest">
+    <b>What runs where, honestly.</b>
+    <span><em class="tag t-browser">browser reference VM</em> live runs in this page: a JavaScript port of the same EVM, so you can try anything. Not the transformer.</span>
+    <span><em class="tag t-fw">firmware on ref machine</em> precomputed: the C EVM compiled to RV32IM, run on Qwenputer's bit-exact reference of the circuit, checked against py-evm.</span>
+    <span><em class="tag t-circuit">circuit (weights)</em> precomputed: the same jobs free-run on the compiled weights (fastexec on CPU), every generated token compared with the reference trace.</span>
+  </div>
+</section>
+
+<section id="how">
+  <h2>How it works</h2>
+  <p class="sub">A real program, stepped one EVM opcode at a time: <span id="ex-label"></span>. The token stream is the real trace this step produced on the reference machine.</p>
+  <div class="pipeline" id="pipeline">
+    <div class="stage" data-stage="0"><div class="st-h">1. Bytecode</div><div class="st-b">Solidity compiled to EVM bytecode, packed into the firmware's job block in RAM.</div></div>
+    <div class="arrow"></div>
+    <div class="stage" data-stage="1"><div class="st-h">2. Fetch and decode</div><div class="st-b">Attention heads look up pc, registers and ROM words. The EVM opcode is fetched by RV32 loads.</div></div>
+    <div class="arrow"></div>
+    <div class="stage" data-stage="2"><div class="st-h">3. ALU in the FFN</div><div class="st-b">Feed-forward units add, shift, multiply and compare 32-bit limbs; a 256-bit word is 8 limbs.</div></div>
+    <div class="arrow"></div>
+    <div class="stage" data-stage="3"><div class="st-h">4. Exact RAM</div><div class="st-b">Gated DeltaNet heads with one-hot keys store stack, memory and storage bytes exactly.</div></div>
+    <div class="arrow"></div>
+    <div class="stage" data-stage="4"><div class="st-h">5. Result</div><div class="st-b">Each emitted token is fed back as the next input. Output bytes are BYTE tokens.</div></div>
+  </div>
+  <div class="explainer">
+    <div class="ex-left">
+      <div class="ex-controls">
+        <button id="ex-play" class="btn">Play</button><button id="ex-step" class="btn ghost">Step</button><button id="ex-reset" class="btn ghost">Reset</button>
+        <label>Speed <input id="ex-speed" type="range" min="1" max="30" value="6"></label>
+        <span id="ex-pos" class="mono"></span>
+      </div>
+      <div class="tape" id="ex-tape"></div>
+      <div class="ex-now">
+        <div><span class="k">pc</span><span id="ex-pc" class="mono"></span></div>
+        <div><span class="k">opcode</span><span id="ex-op" class="mono big"></span></div>
+        <div><span class="k">gas used</span><span id="ex-gas" class="mono"></span></div>
+        <div><span class="k">RV32 tokens this step</span><span id="ex-ntok" class="mono"></span></div>
+      </div>
+      <div class="stackbox"><div class="k">stack (top first)</div><ol id="ex-stack" class="mono"></ol></div>
+    </div>
+    <div class="ex-right">
+      <div class="k">token stream from the reference machine (real)</div>
+      <div id="ex-tokens" class="tokens mono"></div>
+      <p class="note" id="ex-note"></p>
+    </div>
+  </div>
+</section>
+
+<section id="demos">
+  <h2>Ten runnable contracts</h2>
+  <p class="sub">Pick a contract or an input. It runs in your browser right away. The other columns are recorded runs from the firmware, py-evm and the circuit.</p>
+  <div class="cards" id="cards"></div>
+  <div class="panel" id="panel"></div>
+</section>
+
+<section id="own">
+  <h2>Paste your own bytecode</h2>
+  <p class="sub">Runtime bytecode (hex), up to <b>3,072 bytes</b>, the firmware's CODE_MAX. Calldata up to 256 bytes. Runs on the <em class="tag t-browser">browser reference VM</em> only.</p>
+  <div class="own">
+    <label>Bytecode<textarea id="own-code" spellcheck="false" placeholder="e.g. 6005600055600760005260206000f3"></textarea></label>
+    <div class="own-row">
+      <label>Calldata (hex)<input id="own-cd" spellcheck="false" placeholder="optional"></label>
+      <label>Gas<input id="own-gas" value="1000000"></label>
+      <button type="button" class="btn ghost" id="own-sample">Load sample</button>
+      <button type="button" class="btn" id="own-run">Run</button>
+    </div>
+    <div id="own-out"></div>
+  </div>
+</section>
+
+<section id="judge">
+  <h2>Judgement filter</h2>
+  <blockquote class="motive">Some smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That first kind is what motivated this project: fuse the best of smart contracts (trustlessness, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).</blockquote>
+  <div class="flow">
+    <div class="fbox">Transaction</div><div class="farrow"></div>
+    <div class="fbox exact">EVM run<small>exact, deterministic</small></div><div class="farrow"></div>
+    <div class="fbox review">Rule-based review<small>NOT part of the weights</small></div><div class="farrow"></div>
+    <div class="fbox review">LLM judge (optional)<small>pluggable, stub by default</small></div><div class="farrow"></div>
+    <div class="fbox verdict"><span class="v allow">allow</span><span class="v hold">hold</span><span class="v block">block</span></div>
+  </div>
+  <p class="sub">The VM decides what the code allows, exactly. The review then looks at amount, destination and history and returns allow, hold for a human, or block, with a reason. An LLM judge can only make a decision stricter, never looser. The scenarios below use synthetic histories.</p>
+  <div class="scen" id="scen"></div>
+</section>
+
+<section id="results">
+  <h2>Test results</h2>
+  <div id="results-table"></div>
+</section>
+
+<section id="code">
+  <h2>Code: build the weights and run it</h2>
+  <div class="codegrid">
+    <div><h3>Build the circuit and free-run a contract on it (Python, PyTorch)</h3><pre class="code" id="code-py"></pre></div>
+    <div><h3>Quickstart</h3><pre class="code" id="code-sh"></pre></div>
+  </div>
+</section>
+
+<section id="limits">
+  <h2>Limitations</h2>
+  <ul class="limits">
+    <li>The circuit runs here use Qwenputer's compiled chip weights on CPU (its fastexec executor, fp32, sparse). They are not yet run inside the full 18.8 GB merged Qwen3.5-4B checkpoint, which needs a 24 GB GPU.</li>
+    <li>Opcode subset: no KECCAK256 (so no Solidity mappings), no CALL/CREATE/LOG, no SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, no precompiles.</li>
+    <li>Build limits: 3,072 bytes of code, 256 bytes of calldata, 2 KB memory, a 96-entry stack, 48 storage slots per run.</li>
+    <li>Single call, no state trie or persistence between runs; gas refunds are not tracked.</li>
+    <li>It is slow: across the 23 demo runs a whole run costs 87 to 194 tokens per executed EVM opcode, overhead included, and runs range from 16,370 to 605,944 tokens. The batched CPU runs on the weights averaged under 200 tokens per second.</li>
+    <li>The judgement filter is ordinary code with simple heuristics and synthetic histories. It is a design sketch, not a security product.</li>
+  </ul>
+</section>
+
+<section id="future-steps">
+  <h2>Future steps</h2>
+  <p><b>Untested, not a claim.</b> Merge the compiled machine into a Qwen-class model, as Qwenputer's merged Qwen3.5-4B checkpoint does for its CPU, so one model does both language judgement and exact execution of the EVM firmware. Its size would be dominated by the base model: Qwenputer's checkpoint is 18.8 GB and needs a 24 GB GPU, while the CPU layers and the firmware are small by comparison.</p>
+</section>
+
+<section id="where">
+  <h2>Where this could run</h2>
+  <p class="sub">This is a demo that exact computation can live in a model's weights. It is not a node replacement.</p>
+  <div class="two wgrid">
+    <div class="wcard"><h4>Realistic today</h4><ul>
+      <li><b>Sidecar next to the chain software.</b> A node operator runs the model beside their own client to review, flag or hold transactions in their own RPC endpoint, mempool view or wallet guard. It affects only that operator, not consensus. This is the realistic path today.</li>
+      <li><b>Off-chain checker and audit.</b> Re-run a transaction on the weights machine, compare it with the reference result and attach the review to an audit trail.</li>
+      <li><b>Judgement layer in front of a wallet or multisig.</b> The exact VM result plus the review step decides allow, hold or block before a signer approves.</li></ul></div>
+    <div class="wcard"><h4>Research direction: part of consensus</h4><ul>
+      <li><b>Determinism.</b> GPU floating point can differ across hardware and software versions. The compiled CPU here matched the reference trace token for token on CPU in fp32, but agreement across GPUs and software versions has not been tested, and a full Qwen-sized model is a much bigger problem.</li>
+      <li><b>Cost and speed.</b> A tiny program takes tens of thousands of tokens, and every validator would repeat it. Here a whole demo run costs 87 to 194 tokens per executed EVM opcode, and even the smallest run is 16,370 tokens.</li>
+      <li><b>Compute limits.</b> The model run would need to be metered and bounded by gas like any other execution.</li></ul></div>
+  </div>
+  <p class="muted small">The judgement filter is illustrative heuristics on synthetic histories, not a security product.</p>
+</section>
+
+<section id="support">
+  <h2>Support</h2>
+  <p>Drop me some ETH if you want to support me to keep working on this.</p>
+  <div class="addr"><code id="support-addr">0xF2c09bB10Fd950095DD14Ff3289B82f9E264d826</code><button type="button" class="copybtn" onclick="navigator.clipboard.writeText(document.getElementById('support-addr').textContent).then(()=>{this.textContent='Copied'})">Copy</button></div>
+</section>
+
+<footer>
+  <img src="assets/evmllm-mark.png" alt="" width="28" height="28">
+  <div>EVMLLM is open source (MIT): <a href="https://github.com/Verafyai/evmLLM">github.com/Verafyai/evmLLM</a>. Built on <a href="https://divagr.com/blog/qwenputer">Qwenputer</a> by <a href="https://x.com/divagr1925/status/2115394340357116169">divagr1925</a> (<a href="https://huggingface.co/divagr1925/Qwen3.5-4B-Qwenputer">weights</a>, MIT). Reference EVM: py-evm. Sibling project: <a href="https://svmllm.rexstjohn.com">SVMLLM</a>.</div>
+</footer>
+<script src="evm.js"></script>
+<script src="judge.js"></script>
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

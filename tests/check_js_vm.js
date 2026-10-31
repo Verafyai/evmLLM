@@ -1,5 +1,5 @@
-// Check the site's browser reference VM (evllm-site/evm.js) against py-evm results.
-const E = require(process.argv[2] || "../../evllm-site/evm.js");
+// Check the site's browser reference VM (site/evm.js) against py-evm results.
+const E = require(process.argv[2] || "../site/evm.js");
 const cases = require("../results/pyevm_corpus.json");
 let ok = 0; const bad = [];
 for (const c of cases) {

@@ -11,8 +11,8 @@ from chipformer.rv import spec as S
 from evmllm.demos import ART, DEMOS, describe, jobs
 from evmllm.host import run_pyevm, run_ref
 
-SITE = Path(sys.argv[1] if len(sys.argv) > 1 else "../evllm-site")
 ROOT = Path(__file__).resolve().parent.parent
+SITE = Path(sys.argv[1]) if len(sys.argv) > 1 else (ROOT / "site")
 src = (ROOT / "contracts" / "Demos.sol").read_text()
 
 
