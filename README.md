@@ -223,6 +223,14 @@ The judgement filter is illustrative heuristics on synthetic histories, not a se
 - Slow: tens to a few hundred tokens per second on CPU, and a demo run is 15,000 to 600,000 tokens.
 - The judgement filter is simple heuristics on synthetic histories. It is a design sketch, not a security product.
 
+## Support
+
+Drop me some ETH if you want to support me to keep working on this.
+
+```
+0xF2c09bB10Fd950095DD14Ff3289B82f9E264d826
+```
+
 ## Credits
 
 - **Qwenputer** by Divyansh Agrawal ([@divagr1925](https://x.com/divagr1925/status/2115394340357116169)): [blog post](https://divagr.com/blog/qwenputer), [weights on Hugging Face](https://huggingface.co/divagr1925/Qwen3.5-4B-Qwenputer), [code](https://github.com/divagr18/qwenputer) (MIT). EVMLLM would not exist without it: the CPU in the weights, the chipformer compiler, the reference machine and the fastexec executor are all Qwenputer's.
