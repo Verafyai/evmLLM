@@ -1,10 +1,25 @@
-<p align="center"><img src="assets/evmllm-logo.png" alt="EVMLLM" width="420"></p>
+<p align="center"><img src="assets/evmllm-logo.png" alt="EVMLLM" width="360"></p>
 
-<h3 align="center">An Ethereum VM executed by transformer weights</h3>
+<h1 align="center">EVMLLM</h1>
+<p align="center"><b>An Ethereum VM executed by transformer weights.</b><br>
+Solidity contracts run on a RISC-V CPU that lives in compiled transformer layers: exact results, exact gas, zero training.</p>
+<p align="center"><a href="https://evmllm.rexstjohn.com">Live demo: evmllm.rexstjohn.com</a> | <a href="https://github.com/Verafyai/evmLLM">github.com/Verafyai/evmLLM</a> | Sibling project: <a href="https://github.com/Verafyai/svmLLM">SVMLLM</a> (<a href="https://svmllm.rexstjohn.com">svmllm.rexstjohn.com</a>)</p>
 
-EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, SwiGLU feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. Ten Solidity contracts run on it, every result is checked against py-evm, and a separate judgement filter shows how an exact VM and a context-aware reviewer can work together.
+---
 
-**Live demo:** [evmllm.rexstjohn.com](https://evmllm.rexstjohn.com) has ten runnable contracts, an animated walkthrough of a real trace, a paste-your-own-bytecode box and the judgement filter. Sibling project: [SVMLLM](https://github.com/Verafyai/svmLLM), a Solana sBPF VM in hand-built weights ([svmllm.rexstjohn.com](https://svmllm.rexstjohn.com)).
+## The pitch
+
+EVMLLM runs Ethereum smart contracts on a CPU that lives inside transformer weights. A small EVM interpreter written in C is compiled to RISC-V (RV32IM) and executed by [Qwenputer](https://divagr.com/blog/qwenputer), a stack of transformer layers whose every weight was set by a compiler, not by training: attention heads fetch and decode instructions, SwiGLU feed-forward blocks do the arithmetic, and Gated DeltaNet heads act as exact RAM. The EVM is not hand-built into the weights: it is firmware, and the CPU that runs it is Qwenputer's. Ten Solidity contracts run on it, and every result is checked against py-evm.
+
+On top of the VM sits a **judgement filter**: after the contract has run, a separate review step looks at the amount, the destination and the history, and returns allow, hold or block with a reason.
+
+## Why: code that does exactly what it says
+
+Some of the costliest smart-contract incidents involve code that ran exactly as written, with an outcome a sensible human operator would have stopped. Many others are ordinary bugs or key compromises; this project targets only the first kind. That gap motivated this project: fuse the best of smart contracts (trustless, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
+
+A transformer that can execute contract bytecode exactly is a step toward a single model that both runs the program deterministically and reasons about whether the result makes sense.
+
+<p align="center"><img src="assets/judgement-check.png" alt="Judgement check: the contract runs in the VM, the exact result says it is valid by the code, and a separate heuristic check outside the weights blocks a withdrawal 100x the usual size to a never-seen address" width="820"></p>
 
 ---
 
@@ -83,7 +98,6 @@ All sources are in [`contracts/Demos.sol`](contracts/Demos.sol). The numbers com
 
 ## Judgement filter
 
-> Exploits often happen because code did exactly what it was written to do, with an outcome a sensible human operator would have stopped. That gap motivated this project: fuse the best of smart contracts (trustlessness, deterministic and decentralized execution) with the best of human intelligence (judgement based on context).
 
 The flow is `transaction -> exact EVM run -> rule-based review -> optional LLM judge -> allow / hold / block`.
 
@@ -95,7 +109,7 @@ Five scenarios with synthetic histories (`PYTHONPATH=. python -m evmllm.judge_ex
 
 | Scenario | Call | VM | Verdict | Reasons |
 |---|---|---|---|---|
-| Valid withdrawal, 100x usual size, never-seen address | `withdraw(450 ETH)` | returns 15500000000000000000 | **BLOCK** (65) | 111x the usual size (median 4.05 ETH); destination 0x7e5700000000000000000000000000000000bad0 never seen before |
+| Valid withdrawal, 100x usual size, never-seen address | `withdraw(450 ETH)` | returns 1550000000000000000000 | **BLOCK** (65) | 111x the usual size (median 4.05 ETH); destination 0x7e5700000000000000000000000000000000bad0 never seen before |
 | Ordinary transfer to a known address | `transfer(3 tokens)` | returns 97000000000000000000 | **ALLOW** (0) | in line with history, known destination |
 | Rapid repeated withdrawals, each one within the limit | `withdraw(490 ETH)` | returns 40000000000000000000 | **BLOCK** (65) | 4 withdrawals in 10 minutes (1,960 ETH total); pattern would drain over half the balance; empties 90%+ of the balance |
 | Spend under the $1B cap, but 95% of it in one call | `spend($950,000,000)` | returns 950000000000000 | **HOLD** (50) | 24x the usual size (median 39.0M USD); 95% of the contract cap in one call |
@@ -113,7 +127,7 @@ git -C /tmp/qwp apply "$PWD/qwenputer-cpu.patch"
 
 sudo apt install gcc-riscv64-unknown-elf          # only needed to rebuild the firmware
 python3 -m venv .venv && . .venv/bin/activate
-pip install torch numpy py-evm eth-abi py-solc-x -e /tmp/qwp/experimental/riscv
+python3 -m pip install -r requirements.txt -e /tmp/qwp/experimental/riscv
 
 ./firmware/build.sh                               # C EVM -> firmware/evm.elf (a prebuilt ELF is included)
 PYTHONPATH=. python tests/demos_ref.py            # 23 demo runs vs py-evm
@@ -206,15 +220,7 @@ Making the weights machine part of consensus would need:
 
 The judgement filter is illustrative heuristics on synthetic histories, not a security product.
 
-## Future possibilities
-
-- **Run inside the full merged checkpoint.** Rent a 24 GB GPU and run the same firmware inside Qwenputer's merged Qwen3.5-4B model, so the language model and the EVM share one forward pass.
-- **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should give orders of magnitude more tokens per second.
-- **A chat bridge.** A small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation and read back exact results, with the judgement filter as an in-context reviewer.
-- **More of the EVM.** KECCAK256 (unlocks Solidity mappings), LOG, SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, larger memory and storage, and multi-call state.
-- **Smarter review.** A real LLM judge behind the `LLMJudge` interface, richer history features, and per-protocol policies.
-
-## Limitations
+## Honest limitations
 
 - The weights runs use Qwenputer's compiled chip layers on CPU (fp32, sparse). The full 18.8 GB merged checkpoint has not been run yet.
 - Opcode subset only: no KECCAK256 (so no mappings), no CALL/CREATE/LOG, no SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, no precompiles.
@@ -222,6 +228,28 @@ The judgement filter is illustrative heuristics on synthetic histories, not a se
 - Single call with preset storage. No state trie, no persistence between runs, gas refunds not tracked.
 - Slow: tens to a few hundred tokens per second on CPU, and a demo run is 15,000 to 600,000 tokens.
 - The judgement filter is simple heuristics on synthetic histories. It is a design sketch, not a security product.
+
+## Future possibilities
+
+- **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should give orders of magnitude more tokens per second.
+- **A chat bridge.** A small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation and read back exact results, with the judgement filter as an in-context reviewer.
+- **More of the EVM.** KECCAK256 (unlocks Solidity mappings), LOG, SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, larger memory and storage, and multi-call state.
+- **Smarter review.** A real LLM judge behind the `LLMJudge` interface, richer history features, and per-protocol policies.
+
+## Next steps: run inside the full Qwenputer checkpoint (needs a GPU)
+
+Every weights run so far uses Qwenputer's compiled chip layers on CPU. The next step is the merged model, where the same CPU sits inside Qwen3.5-4B.
+
+1. Get a single 24 GB GPU (the Qwenputer post uses an L4). The merged checkpoint is 18.8 GB, and the post reports about 3,200 CPU tokens per second for its batched executor on an L4.
+2. Reproduce Qwenputer first, using the commands from the post:
+   ```bash
+   git clone https://github.com/divagr18/qwenputer && cd qwenputer/experimental/riscv && uv sync --extra hf
+   hf download divagr1925/Qwen3.5-4B-Qwenputer --local-dir qwenputer-rv
+   uv run python -m chipformer.rv.chat qwenputer-rv --firmware tests/data/rv/calc-bridge.elf \
+       --ask "Use calc: what is 123456789 * 987654321?"
+   ```
+3. Load `firmware/evm.elf` with a job block in place of the calculator firmware, run the 12 weights rows and the 23 demo inputs, and require every token to match the reference trace, as the CPU runs here do.
+4. Add a small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation, then wire the judgement filter to Qwen itself through `LLMJudge`, so one model runs the contract exactly and reviews the result.
 
 ## Support
 
@@ -235,6 +263,7 @@ Drop me some ETH if you want to support me to keep working on this.
 
 - **Qwenputer** by Divyansh Agrawal ([@divagr1925](https://x.com/divagr1925/status/2115394340357116169)): [blog post](https://divagr.com/blog/qwenputer), [weights on Hugging Face](https://huggingface.co/divagr1925/Qwen3.5-4B-Qwenputer), [code](https://github.com/divagr18/qwenputer) (MIT). EVMLLM would not exist without it: the CPU in the weights, the chipformer compiler, the reference machine and the fastexec executor are all Qwenputer's.
 - **py-evm** (Ethereum Foundation) as the reference EVM, **solc** for compilation.
+- Sibling project: [SVMLLM](https://github.com/Verafyai/svmLLM), a Solana sBPF VM in hand-built weights ([svmllm.rexstjohn.com](https://svmllm.rexstjohn.com)).
 
 ## License
 
