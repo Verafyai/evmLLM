@@ -234,8 +234,11 @@ The judgement filter is illustrative heuristics on synthetic histories, not a se
 - **Faster execution.** Qwenputer's GPU executor and a leaner trace format (skip the per-opcode hex print) should be much faster; this has not been measured yet.
 - **A chat bridge.** A small bridge firmware so the model can call `evm_run(bytecode, calldata)` mid-conversation and read back exact results, with the judgement filter as an in-context reviewer.
 - **More of the EVM.** KECCAK256 (unlocks Solidity mappings), LOG, SDIV/SMOD/SIGNEXTEND/ADDMOD/MULMOD, larger memory and storage, and multi-call state.
-- **One model for judgement and execution (future work, untested).** Run EVMLLM inside a Qwen-class model that carries the compiled CPU, as Qwenputer's merged Qwen3.5-4B checkpoint does, so the same model reviews a transaction in language and executes it exactly. This has not been built or tested here. Its size and speed would be dominated by the base model (Qwenputer's checkpoint is 18.8 GB and needs a 24 GB GPU), not by the EVM firmware.
 - **Smarter review.** A real LLM judge behind the `LLMJudge` interface, richer history features, and per-protocol policies.
+
+## Future steps
+
+**Untested, not a claim.** Merge the compiled machine into a Qwen-class model, as Qwenputer's merged Qwen3.5-4B checkpoint does for its CPU, so one model does both the language judgement and the exact execution of the EVM firmware. This has not been built or tested here. Its size and speed would be dominated by the base model: Qwenputer's checkpoint is 18.8 GB and needs a 24 GB GPU, while the CPU layers and the EVM firmware are small by comparison.
 
 ## Next steps: run inside the full Qwenputer checkpoint (needs a GPU)
 
