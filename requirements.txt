@@ -1,0 +1,5 @@
+torch
+numpy
+py-evm
+eth-abi
+py-solc-x
